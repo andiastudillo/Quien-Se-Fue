@@ -154,13 +154,13 @@ details.ayuda li { margin-bottom: 6px; }
 .fechas { margin-bottom: 16px; }
 .resumen { margin: 0 0 16px; color: var(--ink2); }
 .tabs {
-  display: flex; gap: 6px; overflow-x: auto;
-  margin: 0 -18px; padding: 2px 18px 8px;
-  scrollbar-width: thin;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+  margin: 0; padding: 2px 0 8px;
 }
 .tab {
-  flex: 0 0 auto; text-align: left; font: inherit; cursor: pointer;
-  min-height: 44px; padding: 8px 14px;
+  display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-start;
+  text-align: left; font: inherit; cursor: pointer;
+  min-height: 44px; padding: 10px 14px;
   border-radius: 10px; border: 1.5px solid var(--line);
   background: transparent; color: var(--ink2);
 }
@@ -268,8 +268,12 @@ function dif(a, b) {
   var sb = new Set(b);
   return a.filter(function (x) { return !sb.has(x); });
 }
-function normalizar(t) {
-  return String(t || "").trim().replace(/^@/, "").toLowerCase().replace(/[^a-z0-9._]/g, "").slice(0, 30);
+function validarUsuario(t) {
+  var n = String(t || "").trim().replace(/^@/, "").toLowerCase();
+  if (!n) return { ok: false, error: "Escribí el usuario de la cuenta." };
+  if (n.length > 30) return { ok: false, error: "Los usuarios de Instagram tienen hasta 30 caracteres." };
+  if (!/^[a-z0-9._]+$/.test(n)) return { ok: false, error: "Un usuario de Instagram solo puede tener letras, números, puntos y guiones bajos, sin espacios." };
+  return { ok: true, nombre: n };
 }
 /* PURE:END */
 
@@ -393,7 +397,7 @@ async function copiar(texto) {
 /* ---------- Lectura de la exportación ---------- */
 async function leerArchivos(files) {
   var seg = new Set(), sgd = new Set();
-  var nSeg = 0, nSgd = 0, hayHtml = false, fecha = null;
+  var nSeg = 0, nSgd = 0, hayHtml = false, fecha = null, usuarioArchivo = null;
   function tomar(nombre, texto) {
     var data;
     try { data = JSON.parse(texto); }
@@ -406,6 +410,8 @@ async function leerArchivos(files) {
     var f = files[i];
     var m = f.name.match(/(\d{4}-\d{2}-\d{2})/);
     if (m && !fecha) fecha = m[1];
+    var mu = f.name.match(/^instagram-(.+?)-\d{4}-\d{2}-\d{2}/i);
+    if (mu && !usuarioArchivo) { var vu = validarUsuario(mu[1]); if (vu.ok) usuarioArchivo = vu.nombre; }
     if (/\.zip$/i.test(f.name)) {
       if (!window.JSZip) throw new Error("No se pudo cargar el lector de .zip. Revisá tu conexión o descomprimí la carpeta y elegí los archivos .json.");
       var zip;
@@ -426,11 +432,11 @@ async function leerArchivos(files) {
   }
   if (!nSeg || !nSgd) {
     if (hayHtml && !nSeg && !nSgd) throw new Error("Esta exportación está en formato HTML. Pedila de nuevo y elegí formato JSON.");
-    var falta = (!nSeg && !nSgd) ? "followers_1.json ni following.json" : (!nSeg ? "followers_1.json" : "following.json");
+    var falta = (!nSeg && !nSgd) ? "followers.json ni following.json" : (!nSeg ? "followers.json" : "following.json");
     throw new Error("No encontré " + falta + ". Elegí el .zip completo, o los dos archivos juntos.");
   }
   if (!fecha || fecha > hoyISO()) fecha = hoyISO();
-  return { seguidores: Array.from(seg).sort(), seguidos: Array.from(sgd).sort(), fecha: fecha };
+  return { seguidores: Array.from(seg).sort(), seguidos: Array.from(sgd).sort(), fecha: fecha, usuarioArchivo: usuarioArchivo };
 }
 
 async function cargarArchivos(files) {
@@ -462,8 +468,9 @@ function elegirCuenta(n) {
   renderAll();
 }
 async function crearCuenta(v) {
-  var n = normalizar(v);
-  if (!n) { aviso("Escribí el usuario de la cuenta (letras, números, punto o guion bajo).", "error"); return; }
+  var r = validarUsuario(v);
+  if (!r.ok) { aviso(r.error, "error"); return; }
+  var n = r.nombre;
   if (!S.cuentas.has(n)) {
     var rec = { nombre: n, snaps: [] };
     S.cuentas.set(n, rec);
@@ -531,11 +538,15 @@ function renderCuentas() {
     });
     box.append(grupo);
   }
-  var inp = el("input", { type: "text", id: "nueva-cuenta", placeholder: "Usuario de la cuenta, sin @", autocomplete: "off", autocapitalize: "none", spellcheck: "false", "aria-label": "Usuario de la cuenta nueva" });
+  var inp = el("input", { type: "text", id: "nueva-cuenta", placeholder: "Usuario de la cuenta, sin @", maxlength: "31", autocomplete: "off", autocapitalize: "none", spellcheck: "false", "aria-label": "Usuario de la cuenta nueva" });
+  inp.addEventListener("input", function () {
+    var limpio = inp.value.replace(/[^a-zA-Z0-9._@]/g, "");
+    if (limpio !== inp.value) inp.value = limpio;
+  });
   inp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); crearCuenta(inp.value); } });
   box.append(el("div", { class: "nueva" }, inp,
     el("button", { type: "button", class: "btn sec", onclick: function () { crearCuenta(inp.value); } }, nombres.length ? "Agregar cuenta" : "Crear cuenta")));
-  if (!nombres.length) box.append(el("p", { class: "nota", text: "Escribí el usuario de la cuenta que vas a controlar. Después podés sumar todas las que quieras." }));
+  box.append(el("p", { class: "nota", text: (nombres.length ? "" : "Escribí el usuario de la cuenta que vas a controlar. Después podés sumar todas las que quieras. ") + "Es un solo usuario de Instagram: hasta 30 caracteres, solo letras, números, puntos y guiones bajos." }));
 }
 
 function renderCarga() {
@@ -549,7 +560,7 @@ function renderCarga() {
   });
   var zona = el("label", { class: "drop", for: "archivo" },
     el("strong", { text: "Elegí el archivo .zip de Instagram" }),
-    el("span", { text: "También sirven los archivos followers_1.json y following.json juntos. En la computadora podés arrastrarlos hasta acá." }));
+    el("span", { text: "También sirven los archivos followers.json y following.json juntos. En la computadora podés arrastrarlos hasta acá." }));
   ["dragenter", "dragover"].forEach(function (ev) { zona.addEventListener(ev, function (e) { e.preventDefault(); zona.classList.add("sobre"); }); });
   ["dragleave", "drop"].forEach(function (ev) { zona.addEventListener(ev, function (e) { e.preventDefault(); zona.classList.remove("sobre"); }); });
   zona.addEventListener("drop", function (e) { cargarArchivos(Array.from((e.dataTransfer && e.dataTransfer.files) || [])); });
@@ -571,10 +582,16 @@ function renderCarga() {
     fi.addEventListener("change", function () {
       if (REG_FECHA.test(fi.value)) { p.fecha = fi.value; renderCarga(); }
     });
+    var ua = p.usuarioArchivo;
+    var cruce = (ua && ua !== S.actual) ? [
+      el("p", { class: "nota alerta", text: c ? "Ojo: este archivo parece ser de @" + ua + ", pero tenés elegida la cuenta @" + S.actual + "." : "Este archivo parece ser de @" + ua + "." }),
+      el("div", { class: "acciones" }, el("button", { type: "button", class: "btn sec", onclick: function () { crearCuenta(ua); } }, "Usar @" + ua))
+    ] : null;
     box.append(el("div", { class: "pend" },
       el("p", { class: "pend-tit", text: "Encontré " + p.seguidores.length + " seguidores y " + p.seguidos.length + " seguidos." }),
       el("div", { class: "campo" }, el("label", { for: "fecha", text: "Fecha de la exportación" }), fi),
       el("p", { class: "nota", text: c ? "Se guarda en @" + S.actual + "." + (existe ? " Ya hay una foto con esta fecha: se va a reemplazar." : "") : "Primero creá o elegí una cuenta en el paso 1." }),
+      cruce,
       el("div", { class: "acciones" },
         el("button", { type: "button", class: "btn", disabled: !c, onclick: guardarPend }, "Guardar foto"),
         el("button", { type: "button", class: "btn texto", onclick: function () { S.pend = null; renderCarga(); } }, "Descartar"))));
@@ -757,8 +774,9 @@ async function restaurar(file) {
     var nc = 0, nf = 0;
     for (var i = 0; i < obj.cuentas.length; i++) {
       var rc = obj.cuentas[i];
-      var nombre = normalizar(rc && rc.nombre);
-      if (!nombre || !Array.isArray(rc.snaps)) continue;
+      var vr = validarUsuario(rc && rc.nombre);
+      if (!vr.ok || !Array.isArray(rc.snaps)) continue;
+      var nombre = vr.nombre;
       var c = S.cuentas.get(nombre);
       if (!c) { c = { nombre: nombre, snaps: [] }; S.cuentas.set(nombre, c); }
       rc.snaps.forEach(function (s) {
