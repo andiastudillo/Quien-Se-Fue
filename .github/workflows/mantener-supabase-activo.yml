@@ -10,4 +10,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Pedido al proyecto de Supabase
-        run: curl -s -o /dev/null -w "%{http_code}\n" -H "apikey: sb_publishable_AxAAi6LMTk6_A7JgyLK5BA_ArMtOaG4" "https://qfbskivafuungzdfzggv.supabase.co/auth/v1/health"
+        run: |
+          curl -s -o /dev/null -w "%{http_code}\n" -H "apikey: sb_publishable_AxAAi6LMTk6_A7JgyLK5BA_ArMtOaG4" "https://qfbskivafuungzdfzggv.supabase.co/auth/v1/health"
